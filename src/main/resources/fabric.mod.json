@@ -1,0 +1,31 @@
+{
+	"schemaVersion": 1,
+	"id": "campdhub",
+	"version": "${version}",
+	"name": "CampD Hub",
+	"description": "CampD's Hub Server Mod",
+	"authors": ["Me!"],
+	"contact": {
+		"sources": "https://github.com/FabricMC/fabric-example-mod"
+	},
+	"license": "CC0-1.0",
+	"icon": "assets/campdhub/icon.png",
+	"environment": "*",
+	"entrypoints": {
+		"main": [
+			"com.campd.hub.CampDHub"
+		],
+		"fabric-datagen": [
+			"com.campd.hub.CampDHubDataGenerator"
+		]
+	},
+	"mixins": [
+		"campdhub.mixins.json"
+	],
+	"depends": {
+		"fabricloader": ">=0.18.4",
+		"minecraft": "~1.21.11",
+		"java": ">=21",
+		"fabric-api": "*"
+	}
+}
