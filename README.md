@@ -24,7 +24,7 @@ All `/hubportal` subcommands require the executor to be a player and an operator
 
 | Command | Description |
 |--------|-------------|
-| `/hubportal create <name> [color] [scale]` | Create a portal. Order is `<name> <color> <scale>` or `<name> <scale> <color>`; scale is optional. Color: dye name or `r,g,b` (0–1). If the last token is a number 0.1–10, it’s used as scale and the rest as color. A single number 0.1–10 is scale (color white). Examples: `create myportal red`, `create myportal red 1.5`, `create myportal 1.5 red`, `create myportal 1,0,0 2` or `2 1,0,0`. |
+| `/hubportal create <name> [color\|scale]` | Create a portal at your feet. Optional second argument: color (dye/custom name or `r,g,b` 0–1) and/or scale (0.1–10). Color and scale auto-detect in either order. If the last token is a number 0.1–10, it’s used as scale and the rest as color. A single number 0.1–10 is scale (color white). Examples: `create myportal red`, `create myportal red 1.5`, `create myportal 1.5 red`, `create myportal 1,0,0 2` or `2 1,0,0`. |
 | `/hubportal link <name1> <name2>` | Link two portals. Each portal can only be linked to one other; unlink first if needed. |
 | `/hubportal unlink <name1> <name2>` | Remove the link between two portals. |
 | `/hubportal delete <name>` | Delete a portal. Fails if it is linked; unlink first. |
@@ -38,6 +38,11 @@ All `/hubportal` subcommands require the executor to be a player and an operator
 | `/hubportal color add <name> <color>` | Add a custom color name. `<name>` must not be a Minecraft dye name. `<color>` can be a dye name, custom name, or `r,g,b` (0–1). |
 | `/hubportal color edit <name> <color>` | Change an existing custom color’s RGB. Only custom colors can be edited; Minecraft dye names cannot. |
 
+## In-game autocomplete
+
+- **Create:** After `<name>`, Tab suggests dye names, custom color names, and scale values (e.g. `1.0`, `1.5`). After a first token (e.g. `red ` or `1.5 `), Tab suggests the other (scale or color).
+- **Delete, link, unlink, info, edit:** Tab suggests existing portal names for the `<name>` argument(s).
+
 ## Development
 
 - **Version:** see `gradle.properties` (`mod_version`, `minecraft_version`) and `src/main/resources/fabric.mod.json`.
@@ -47,3 +52,7 @@ All `/hubportal` subcommands require the executor to be a player and an operator
 ## Plan and future work
 
 See [plan.md](plan.md) for the full plan and rules. Possible future work: cross-dimension teleport, configurable particle count.
+
+## License
+
+See [LICENSE](LICENSE).
