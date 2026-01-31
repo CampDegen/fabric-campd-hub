@@ -58,7 +58,9 @@ All `/hubportal` subcommands require the executor to be a player and an operator
 
 ## Plan and future work
 
-Add parkour logic.
+- Add light sources or a way to make the portals glow that is toggleable
+- Add parkour logic
+- Villager Trade Logic
 
 ## License
 
