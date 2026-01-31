@@ -1,6 +1,5 @@
 package com.campd.hub.portal;
 
-import com.campd.hub.commands.portal.PortalState;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
 import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.server.world.ServerWorld;

@@ -1,4 +1,4 @@
-package com.campd.hub.commands.portal;
+package com.campd.hub.portal;
 
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;

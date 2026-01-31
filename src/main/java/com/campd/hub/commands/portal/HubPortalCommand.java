@@ -1,10 +1,11 @@
 package com.campd.hub.commands.portal;
 
+import com.campd.hub.portal.ColorResolver;
+import com.campd.hub.portal.PortalState;
 import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.arguments.FloatArgumentType;
 import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.exceptions.CommandSyntaxException;
-import com.mojang.brigadier.suggestion.SuggestionProvider;
 import net.minecraft.server.command.ServerCommandSource;
 import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.server.world.ServerWorld;
@@ -13,180 +14,11 @@ import net.minecraft.util.DyeColor;
 import net.minecraft.util.Formatting;
 import net.minecraft.util.math.BlockPos;
 
-import java.util.concurrent.CompletableFuture;
-
 import static net.minecraft.server.command.CommandManager.argument;
 import static net.minecraft.server.command.CommandManager.literal;
 
 public final class HubPortalCommand {
     private HubPortalCommand() {}
-
-    /** Normalize color name for lookup: lowercase, spaces to underscores. */
-    private static String normalizeColorName(String name) {
-        return name == null ? "" : name.trim().toLowerCase().replace(' ', '_');
-    }
-
-    /** Result of parsing create's color argument: may include optional scale. */
-    private static final class ColorAndScale {
-        final String colorStr;
-        final float scale;
-
-        ColorAndScale(String colorStr, float scale) {
-            this.colorStr = colorStr;
-            this.scale = scale;
-        }
-    }
-
-    /** Parse "color [scale]" from create: color is name or r,g,b; optional last token as scale (0.1–10). */
-    private static ColorAndScale parseColorAndScale(String colorAndScale) {
-        if (colorAndScale == null || colorAndScale.isEmpty())
-            return new ColorAndScale("white", 1.0f);
-        String trimmed = colorAndScale.trim();
-        String[] parts = trimmed.split("\\s+");
-        if (parts.length == 1) {
-            try {
-                float scale = Float.parseFloat(parts[0]);
-                if (scale >= 0.1f && scale <= 10f)
-                    return new ColorAndScale("white", scale);  // scale only, default color
-            } catch (NumberFormatException ignored) {}
-            return new ColorAndScale(trimmed, 1.0f);
-        }
-        // 2+ tokens: try "color scale" (last token = scale), then "scale color" (first token = scale)
-        try {
-            float last = Float.parseFloat(parts[parts.length - 1]);
-            if (last >= 0.1f && last <= 10f) {
-                String colorStr = String.join(" ", java.util.Arrays.copyOf(parts, parts.length - 1)).trim();
-                if (!colorStr.isEmpty())
-                    return new ColorAndScale(colorStr, last);
-            }
-        } catch (NumberFormatException ignored) {}
-        try {
-            float first = Float.parseFloat(parts[0]);
-            if (first >= 0.1f && first <= 10f) {
-                String colorStr = parts.length == 2 ? parts[1] : String.join(" ", java.util.Arrays.copyOfRange(parts, 1, parts.length));
-                if (!colorStr.isEmpty())
-                    return new ColorAndScale(colorStr.trim(), first);
-            }
-        } catch (NumberFormatException ignored) {}
-        return new ColorAndScale(trimmed, 1.0f);
-    }
-
-    /** Parse color from Minecraft dye name, custom color name, or "r,g,b" (0–1). Requires source for custom colors. */
-    private static float[] parseColor(ServerCommandSource src, String colorStr) {
-        if (colorStr == null || colorStr.isEmpty())
-            return new float[]{1f, 1f, 1f};
-        String normalized = normalizeColorName(colorStr);
-        DyeColor dye = DyeColor.byId(normalized, null);
-        if (dye != null) {
-            int rgb = dye.getSignColor();
-            return new float[]{
-                ((rgb >> 16) & 0xFF) / 255f,
-                ((rgb >> 8) & 0xFF) / 255f,
-                (rgb & 0xFF) / 255f
-            };
-        }
-        if (src != null) {
-            var custom = PortalState.get(src.getServer()).getCustomColors().get(normalized);
-            if (custom != null) return new float[]{custom[0], custom[1], custom[2]};
-        }
-        // Try "r,g,b" (0–1 floats)
-        String[] parts = colorStr.split(",");
-        if (parts.length == 3) {
-            try {
-                return new float[]{
-                    Float.parseFloat(parts[0].trim()),
-                    Float.parseFloat(parts[1].trim()),
-                    Float.parseFloat(parts[2].trim())
-                };
-            } catch (NumberFormatException ignored) {}
-        }
-        return new float[]{1f, 1f, 1f};
-    }
-
-    private static final String[] SCALE_SUGGESTIONS = {"0.5", "1.0", "1.5", "2.0", "2.5", "3.0", "4.0", "5.0"};
-
-    /** Suggests dye names, custom color names, and scale values. After first token (e.g. "red " or "1.5 ") suggests the other (scale or color). */
-    private static SuggestionProvider<ServerCommandSource> createColorOrScaleSuggestions() {
-        return (context, builder) -> {
-            String remaining = builder.getRemaining();
-            int lastSpace = remaining.lastIndexOf(' ');
-            String prefix;
-            String currentToken;
-            boolean hasFirstToken;
-            if (lastSpace >= 0) {
-                prefix = remaining.substring(0, lastSpace + 1);  // e.g. "red " or "1.5 "
-                currentToken = remaining.substring(lastSpace + 1).toLowerCase();
-                hasFirstToken = true;
-            } else {
-                prefix = "";
-                currentToken = remaining.toLowerCase();
-                hasFirstToken = false;
-            }
-            boolean firstIsScale = false;
-            if (hasFirstToken) {
-                String first = prefix.trim();
-                try {
-                    float f = Float.parseFloat(first);
-                    firstIsScale = f >= 0.1f && f <= 10f;
-                } catch (NumberFormatException ignored) {}
-            }
-            if (hasFirstToken && firstIsScale) {
-                // First token is scale → suggest colors for second token
-                for (DyeColor d : DyeColor.values()) {
-                    String id = d.asString();
-                    if (id.startsWith(currentToken) || currentToken.isEmpty())
-                        builder.suggest(prefix + id);
-                }
-                try {
-                    var state = PortalState.get(context.getSource().getServer()).getCustomColors();
-                    for (String name : state.keySet()) {
-                        if (name.toLowerCase().startsWith(currentToken) || currentToken.isEmpty())
-                            builder.suggest(prefix + name);
-                    }
-                } catch (Exception ignored) {}
-            } else if (hasFirstToken) {
-                // First token is color → suggest scale values for second token
-                for (String scale : SCALE_SUGGESTIONS) {
-                    if (scale.startsWith(currentToken) || currentToken.isEmpty())
-                        builder.suggest(prefix + scale);
-                }
-            } else {
-                // No first token yet → suggest colors and scales
-                for (DyeColor d : DyeColor.values()) {
-                    String id = d.asString();
-                    if (id.startsWith(currentToken) || currentToken.isEmpty())
-                        builder.suggest(id);
-                }
-                try {
-                    var state = PortalState.get(context.getSource().getServer()).getCustomColors();
-                    for (String name : state.keySet()) {
-                        if (name.toLowerCase().startsWith(currentToken) || currentToken.isEmpty())
-                            builder.suggest(name);
-                    }
-                } catch (Exception ignored) {}
-                for (String scale : SCALE_SUGGESTIONS) {
-                    if (scale.startsWith(currentToken) || currentToken.isEmpty())
-                        builder.suggest(scale);
-                }
-            }
-            return CompletableFuture.completedFuture(builder.build());
-        };
-    }
-
-    /** Suggests existing portal names from the server state. */
-    private static SuggestionProvider<ServerCommandSource> suggestPortalNames() {
-        return (context, builder) -> {
-            String remaining = builder.getRemaining().toLowerCase();
-            try {
-                var portals = PortalState.get(context.getSource().getServer()).getPortals().keySet();
-                for (String name : portals) {
-                    if (name.toLowerCase().startsWith(remaining) || remaining.isEmpty())
-                        builder.suggest(name);
-                }
-            } catch (Exception ignored) {}
-            return CompletableFuture.completedFuture(builder.build());
-        };
-    }
 
     public static void register(CommandDispatcher<ServerCommandSource> dispatcher) {
         dispatcher.register(
@@ -200,7 +32,7 @@ public final class HubPortalCommand {
                     .then(argument("name", StringArgumentType.word())
                         .executes(ctx -> create(ctx.getSource(), StringArgumentType.getString(ctx, "name"), "white"))
                         .then(argument("color|scale", StringArgumentType.greedyString())
-                            .suggests(createColorOrScaleSuggestions())
+                            .suggests(HubPortalSuggestions.createColorOrScaleSuggestions())
                             .executes(ctx -> create(ctx.getSource(),
                                 StringArgumentType.getString(ctx, "name"),
                                 StringArgumentType.getString(ctx, "color|scale"))))
@@ -208,9 +40,9 @@ public final class HubPortalCommand {
                 )
                 .then(literal("link")
                     .then(argument("name1", StringArgumentType.word())
-                        .suggests(suggestPortalNames())
+                        .suggests(HubPortalSuggestions.suggestPortalNames())
                         .then(argument("name2", StringArgumentType.word())
-                            .suggests(suggestPortalNames())
+                            .suggests(HubPortalSuggestions.suggestPortalNames())
                             .executes(ctx -> link(
                                 ctx.getSource(),
                                 StringArgumentType.getString(ctx, "name1"),
@@ -221,9 +53,9 @@ public final class HubPortalCommand {
                 )
                 .then(literal("unlink")
                     .then(argument("name1", StringArgumentType.word())
-                        .suggests(suggestPortalNames())
+                        .suggests(HubPortalSuggestions.suggestPortalNames())
                         .then(argument("name2", StringArgumentType.word())
-                            .suggests(suggestPortalNames())
+                            .suggests(HubPortalSuggestions.suggestPortalNames())
                             .executes(ctx -> unlink(
                                 ctx.getSource(),
                                 StringArgumentType.getString(ctx, "name1"),
@@ -234,7 +66,7 @@ public final class HubPortalCommand {
                 )
                 .then(literal("delete")
                     .then(argument("name", StringArgumentType.word())
-                        .suggests(suggestPortalNames())
+                        .suggests(HubPortalSuggestions.suggestPortalNames())
                         .executes(ctx -> delete(ctx.getSource(), StringArgumentType.getString(ctx, "name")))
                     )
                 )
@@ -248,13 +80,13 @@ public final class HubPortalCommand {
                 )
                 .then(literal("info")
                     .then(argument("name", StringArgumentType.word())
-                        .suggests(suggestPortalNames())
+                        .suggests(HubPortalSuggestions.suggestPortalNames())
                         .executes(ctx -> info(ctx.getSource(), StringArgumentType.getString(ctx, "name")))
                     )
                 )
                 .then(literal("edit")
                     .then(argument("name", StringArgumentType.word())
-                        .suggests(suggestPortalNames())
+                        .suggests(HubPortalSuggestions.suggestPortalNames())
                         .then(literal("name")
                             .then(argument("newName", StringArgumentType.word())
                                 .executes(ctx -> editName(ctx.getSource(),
@@ -320,16 +152,16 @@ public final class HubPortalCommand {
             return 0;
         }
 
-        ColorAndScale parsed = parseColorAndScale(colorAndScaleStr);
-        float[] color = parseColor(src, parsed.colorStr);
+        ColorResolver.ColorAndScale parsed = ColorResolver.parseColorAndScale(colorAndScaleStr);
+        float[] color = ColorResolver.parseColor(src.getServer(), parsed.colorStr());
 
         BlockPos pos = player.getBlockPos();
         String worldId = world.getRegistryKey().getValue().toString();
-        state.put(new PortalState.Portal(name, worldId, pos, null, color, parsed.scale));
+        state.put(new PortalState.Portal(name, worldId, pos, null, color, parsed.scale()));
 
-        String scaleStr = parsed.scale == 1.0f ? "" : ", scale: " + parsed.scale;
+        String scaleStr = parsed.scale() == 1.0f ? "" : ", scale: " + parsed.scale();
         src.sendFeedback(() -> Text.literal("Created portal '" + name + "' at " +
-            pos.getX() + " " + pos.getY() + " " + pos.getZ() + " in " + worldId + " (color: " + parsed.colorStr + scaleStr + ")"), false);
+            pos.getX() + " " + pos.getY() + " " + pos.getZ() + " in " + worldId + " (color: " + parsed.colorStr() + scaleStr + ")"), false);
         return 1;
     }
 
@@ -493,7 +325,7 @@ public final class HubPortalCommand {
             src.sendError(Text.literal("Portal '" + name + "' does not exist."));
             return 0;
         }
-        float[] color = parseColor(src, colorStr);
+        float[] color = ColorResolver.parseColor(src.getServer(), colorStr);
         if (!state.setColor(name, color)) {
             src.sendError(Text.literal("Could not update color."));
             return 0;
@@ -516,7 +348,7 @@ public final class HubPortalCommand {
             src.sendError(Text.literal("Portal '" + newName + "' already exists. Choose a different name."));
             return 0;
         }
-        float[] color = parseColor(src, colorStr);
+        float[] color = ColorResolver.parseColor(src.getServer(), colorStr);
         if (!state.rename(name, newName)) {
             src.sendError(Text.literal("Could not rename portal."));
             return 0;
@@ -527,7 +359,7 @@ public final class HubPortalCommand {
     }
 
     private static int colorAdd(ServerCommandSource src, String name, String colorValueStr) {
-        String normalized = normalizeColorName(name);
+        String normalized = ColorResolver.normalizeColorName(name);
         if (normalized.isEmpty()) {
             src.sendError(Text.literal("Color name cannot be empty."));
             return 0;
@@ -541,14 +373,14 @@ public final class HubPortalCommand {
             src.sendError(Text.literal("A custom color named '" + normalized + "' already exists. Use '/hubportal color edit " + normalized + " <color>' to change it."));
             return 0;
         }
-        float[] rgb = parseColor(src, colorValueStr);
+        float[] rgb = ColorResolver.parseColor(src.getServer(), colorValueStr);
         state.putCustomColor(normalized, rgb);
         src.sendFeedback(() -> Text.literal("Added custom color '" + normalized + "' (RGB " + String.format("%.2f, %.2f, %.2f", rgb[0], rgb[1], rgb[2]) + ")."), false);
         return 1;
     }
 
     private static int colorEdit(ServerCommandSource src, String name, String colorValueStr) {
-        String normalized = normalizeColorName(name);
+        String normalized = ColorResolver.normalizeColorName(name);
         if (normalized.isEmpty()) {
             src.sendError(Text.literal("Color name cannot be empty."));
             return 0;
@@ -562,7 +394,7 @@ public final class HubPortalCommand {
             src.sendError(Text.literal("No custom color named '" + normalized + "'. Use '/hubportal color add " + normalized + " <color>' to create one."));
             return 0;
         }
-        float[] rgb = parseColor(src, colorValueStr);
+        float[] rgb = ColorResolver.parseColor(src.getServer(), colorValueStr);
         state.putCustomColor(normalized, rgb);
         src.sendFeedback(() -> Text.literal("Updated custom color '" + normalized + "' (RGB " + String.format("%.2f, %.2f, %.2f", rgb[0], rgb[1], rgb[2]) + ")."), false);
         return 1;

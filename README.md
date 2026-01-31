@@ -43,6 +43,13 @@ All `/hubportal` subcommands require the executor to be a player and an operator
 - **Create:** After `<name>`, Tab suggests dye names, custom color names, and scale values (e.g. `1.0`, `1.5`). After a first token (e.g. `red ` or `1.5 `), Tab suggests the other (scale or color).
 - **Delete, link, unlink, info, edit:** Tab suggests existing portal names for the `<name>` argument(s).
 
+## Code organization
+
+- **`com.campd.hub`** – Mod entry (`CampDHub`) and data generator.
+- **`com.campd.hub.commands`** – Command registration (`PortalCommands`).
+- **`com.campd.hub.commands.portal`** – `/hubportal` command tree (`HubPortalCommand`) and Brigadier suggestions (`HubPortalSuggestions`).
+- **`com.campd.hub.portal`** – Portal state and behavior: `PortalState` (persistent data), `PortalParticles`, `PortalTeleport`, and `ColorResolver` (color/scale parsing and dye/custom color resolution).
+
 ## Development
 
 - **Version:** see `gradle.properties` (`mod_version`, `minecraft_version`) and `src/main/resources/fabric.mod.json`.
