@@ -51,7 +51,7 @@ All `/hubportal` subcommands require the executor to be a player and an operator
 
 ## Plan and future work
 
-See [plan.md](plan.md) for the full plan and rules. Possible future work: cross-dimension teleport, configurable particle count.
+Add parkour logic.
 
 ## License
 
